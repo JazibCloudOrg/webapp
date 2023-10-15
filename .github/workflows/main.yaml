@@ -3,7 +3,7 @@ name: Integration Test
 on:
   pull_request:
     branches:
-      - main
+      - dev_org
 
 jobs:
   build:
@@ -52,3 +52,24 @@ jobs:
 
     - name: Run tests
       run: npm test
+    
+    - name: Copy .env to the Web Application
+      run: cp .env webapp
+
+    - name: Compressing the project to the zip file
+      run: zip -r webapp.zip .
+    
+    - name: Setup Packer
+      uses: hashicorp/setup-packer@main
+      id: setup
+      with:
+        version: "latest"
+
+    - name: Run Packer Init
+      run: packer init .
+    
+    - name: Run Packer Format Check
+      run: packer fmt -check=true .
+    
+    - name: Run Packer Validate
+      run: packer validate -var-file=packer_variables.pkrvars.hcl .
