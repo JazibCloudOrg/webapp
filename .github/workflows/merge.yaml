@@ -1,0 +1,85 @@
+name: Integration Test
+
+on:
+  push:
+    branches:
+      - dev_org
+
+jobs:
+  build:
+    name: mergejob
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_DB: ${{ secrets.PGDATABASE }}
+          POSTGRES_USER: ${{ secrets.PGUSER }}
+          POSTGRES_PASSWORD: ${{ secrets.PGPASSWORD }}
+          POSTGRES_PORT: ${{ secrets.PGPORT }}
+          POSTGRES_HOST: ${{ secrets.PGHOST }}
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: "Create env file"
+      run: |
+        touch .env
+        echo PGDATABASE=${{ secrets.PGDATABASE }} >> .env
+        echo PGUSER=${{ secrets.PGUSER }} >> .env
+        echo PGPASSWORD=${{ secrets.PGPASSWORD }} >> .env
+        echo PGPORT=${{ secrets.PGPORT }} >> .env
+        echo PGHOST=${{ secrets.PGHOST }} >> .env
+        echo "cat .env"
+        cat .env
+        echo "ls -a ."
+        ls -a .
+        echo "ls -a ${{ github.workspace }}"
+        ls -a ${{ github.workspace }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16.x'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run tests
+      run: npm test
+    
+    - name: Copy .env to the Web Application
+      run: cp .env webapp
+
+    - name: Compressing the project to the zip file
+      run: zip -r webapp.zip .
+    
+    - name: Configure AWS Credentials for dev
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Setup Packer
+      uses: hashicorp/setup-packer@main
+      id: setup
+      with:
+        version: "latest"
+
+    - name: Run Packer Init
+      run: packer init .
+    
+    - name: Run Packer Format Check
+      run: packer fmt -check=true .
+    
+    - name: Run Packer Validate
+      run: packer validate -var-file=packer_variables.pkrvars.hcl .
+    
+    - name: Run Packer Build
+      run: packer build -var-file=packer_variables.pkrvars.hcl .
